@@ -1,9 +1,9 @@
 from scripts.helpful_scripts import LOCAL_BLOCKCHAIN_ENVIRONMENTS, get_account
 from brownie import (
-    GovernorContract,
-    GovernanceToken,
-    GovernanceTimeLock,
-    Box,
+    governance,
+    govToken,
+    governanceTimeLock,
+    box,
     Contract,
     config,
     network,
@@ -32,19 +32,19 @@ NEW_STORE_VALUE = 5
 def deploy_governor():
     account = get_account()
     governance_token = (
-        GovernanceToken.deploy(
+        govToken.deploy(
             {"from": account},
             publish_source=config["networks"][network.show_active()].get(
                 "verify", False
             ),
         )
-        if len(GovernanceToken) <= 0
-        else GovernanceToken[-1]
+        if len(govToken) <= 0
+        else govToken[-1]
     )
     governance_token.delegate(account, {"from": account})
     print(f"Checkpoints: {governance_token.numCheckpoints(account)}")
     governance_time_lock = governance_time_lock = (
-        GovernanceTimeLock.deploy(
+        governanceTimeLock.deploy(
             MIN_DELAY,
             [],
             [],
@@ -53,10 +53,10 @@ def deploy_governor():
                 "verify", False
             ),
         )
-        if len(GovernanceTimeLock) <= 0
-        else GovernanceTimeLock[-1]
+        if len(governanceTimeLock) <= 0
+        else governanceTimeLock[-1]
     )
-    governor = GovernorContract.deploy(
+    governor = governance.deploy(
         governance_token.address,
         governance_time_lock.address,
         QUORUM_PERCENTAGE,
@@ -84,8 +84,8 @@ def deploy_governor():
 
 def deploy_box_to_be_governed():
     account = get_account()
-    box = Box.deploy({"from": account})
-    tx = box.transferOwnership(GovernanceTimeLock[-1], {"from": account})
+    box = box.deploy({"from": account})
+    tx = box.transferOwnership(governanceTimeLock[-1], {"from": account})
     tx.wait(1)
 
 
@@ -99,12 +99,12 @@ def propose(store_value):
     # We could do this next line with just the Box object
     # But this is to show it can be any function with any contract
     # With any arguments
-    encoded_function = Contract.from_abi("Box", Box[-1], Box.abi).store.encode_input(
+    encoded_function = Contract.from_abi("Box", box[-1], box.abi).store.encode_input(
         *args
     )
     print(encoded_function)
-    propose_tx = GovernorContract[-1].propose(
-        [Box[-1].address],
+    propose_tx = governance[-1].propose(
+        [box[-1].address],
         [0],
         [encoded_function],
         PROPOSAL_DESCRIPTION,
@@ -117,12 +117,12 @@ def propose(store_value):
     # This will return the proposal ID, brownie.exceptions.EventLookupError will be 
     # thrown if ProposalCreated event is not emitted.
     proposal_id = propose_tx.events['ProposalCreated']['proposalId'] # you could also do `propose_tx.return_value` if your node allows
-    print(f"Proposal state {GovernorContract[-1].state(proposal_id)}")
+    print(f"Proposal state {governance[-1].state(proposal_id)}")
     print(
-        f"Proposal snapshot {GovernorContract[-1].proposalSnapshot(proposal_id)}"
+        f"Proposal snapshot {governance[-1].proposalSnapshot(proposal_id)}"
     )
     print(
-        f"Proposal deadline {GovernorContract[-1].proposalDeadline(proposal_id)}"
+        f"Proposal deadline {governance[-1].proposalDeadline(proposal_id)}"
     )
     return proposal_id
 
@@ -133,7 +133,7 @@ def vote(proposal_id: int, vote: int):
     # you can all the #COUNTING_MODE() function to see how to vote otherwise
     print(f"voting yes on {proposal_id}")
     account = get_account()
-    tx = GovernorContract[-1].castVoteWithReason(
+    tx = governance[-1].castVoteWithReason(
         proposal_id, vote, "Cuz I lika do da cha cha", {"from": account}
     )
     tx.wait(1)
@@ -148,13 +148,13 @@ def queue_and_execute(store_value):
     # uint256 proposalId = hashProposal(targets, values, calldatas, descriptionHash);
     # It's nearlly exactly the same as the `propose` function, but we hash the description
     args = (store_value,)
-    encoded_function = Contract.from_abi("Box", Box[-1], Box.abi).store.encode_input(
+    encoded_function = Contract.from_abi("Box", box[-1], box.abi).store.encode_input(
         *args
     )
     # this is the same as ethers.utils.id(description)
     description_hash = Web3.keccak(text=PROPOSAL_DESCRIPTION).hex()
-    tx = GovernorContract[-1].queue(
-        [Box[-1].address],
+    tx = governance[-1].queue(
+        [box[-1].address],
         [0],
         [encoded_function],
         description_hash,
@@ -165,15 +165,15 @@ def queue_and_execute(store_value):
     if network.show_active() == 'development':
         time.sleep(1)
 
-    tx = GovernorContract[-1].execute(
-        [Box[-1].address],
+    tx = governance[-1].execute(
+        [box[-1].address],
         [0],
         [encoded_function],
         description_hash,
         {"from": account},
     )
     tx.wait(1)
-    print(Box[-1].retrieve())
+    print(box[-1].retrieve())
 
 
 def move_blocks(amount):
@@ -199,5 +199,5 @@ def main():
     if network.show_active() in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
         move_blocks(VOTING_PERIOD)
     # States: {Pending, Active, Canceled, Defeated, Succeeded, Queued, Expired, Executed }
-    print(f" This proposal is currently {GovernorContract[-1].state(proposal_id)}")
+    print(f" This proposal is currently {governance[-1].state(proposal_id)}")
     queue_and_execute(NEW_STORE_VALUE)
