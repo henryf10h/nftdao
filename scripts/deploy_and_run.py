@@ -9,8 +9,9 @@ from brownie import (
     network,
     accounts,
     chain,
+    ZERO_ADDRESS
 )
-from web3 import Web3, constants
+from web3 import Web3
 import time
 
 # Governor Contract
@@ -41,13 +42,16 @@ def deploy_governor():
         if len(govToken) <= 0
         else govToken[-1]
     )
+    governance_token.mint(1, {"from": account})
+    chain.sleep(5)
     governance_token.delegate(account, {"from": account})
-    print(f"Checkpoints: {governance_token.numCheckpoints(account)}")
+    #print(f"Checkpoints: {governance_token.numCheckpoints(account)}")
     governance_time_lock = governance_time_lock = (
         governanceTimeLock.deploy(
             MIN_DELAY,
             [],
             [],
+            account,
             {"from": account},
             publish_source=config["networks"][network.show_active()].get(
                 "verify", False
@@ -59,9 +63,9 @@ def deploy_governor():
     governor = governance.deploy(
         governance_token.address,
         governance_time_lock.address,
-        QUORUM_PERCENTAGE,
-        VOTING_PERIOD,
-        VOTING_DELAY,
+        # QUORUM_PERCENTAGE,
+        # VOTING_PERIOD,
+        # VOTING_DELAY,
         {"from": account},
         publish_source=config["networks"][network.show_active()].get("verify", False),
     )
@@ -72,7 +76,7 @@ def deploy_governor():
     timelock_admin_role = governance_time_lock.TIMELOCK_ADMIN_ROLE()
     governance_time_lock.grantRole(proposer_role, governor, {"from": account})
     governance_time_lock.grantRole(
-        executor_role, constants.ADDRESS_ZERO, {"from": account}
+        executor_role, accounts.at(ZERO_ADDRESS,force=True), {"from": account}
     )
     tx = governance_time_lock.revokeRole(
         timelock_admin_role, account, {"from": account}
@@ -84,8 +88,8 @@ def deploy_governor():
 
 def deploy_box_to_be_governed():
     account = get_account()
-    box = box.deploy({"from": account})
-    tx = box.transferOwnership(governanceTimeLock[-1], {"from": account})
+    boxx = box.deploy({"from": account})
+    tx = boxx.transferOwnership(governanceTimeLock[-1], {"from": account})
     tx.wait(1)
 
 
@@ -99,7 +103,7 @@ def propose(store_value):
     # We could do this next line with just the Box object
     # But this is to show it can be any function with any contract
     # With any arguments
-    encoded_function = Contract.from_abi("Box", box[-1], box.abi).store.encode_input(
+    encoded_function = Contract.from_abi("box", box[-1], box.abi).store.encode_input(
         *args
     )
     print(encoded_function)
@@ -138,6 +142,8 @@ def vote(proposal_id: int, vote: int):
     )
     tx.wait(1)
     print(tx.events["VoteCast"])
+    print(tx.events["VoteCast"])
+    print(tx.events["VoteCast"])
 
 
 def queue_and_execute(store_value):
@@ -148,7 +154,7 @@ def queue_and_execute(store_value):
     # uint256 proposalId = hashProposal(targets, values, calldatas, descriptionHash);
     # It's nearlly exactly the same as the `propose` function, but we hash the description
     args = (store_value,)
-    encoded_function = Contract.from_abi("Box", box[-1], box.abi).store.encode_input(
+    encoded_function = Contract.from_abi("box", box[-1], box.abi).store.encode_input(
         *args
     )
     # this is the same as ethers.utils.id(description)
